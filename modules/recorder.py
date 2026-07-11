@@ -1,7 +1,11 @@
 import cv2
-from pathlib import Path
+from collections import deque
 
-from config import PHOTOS_DIR, VIDEOS_DIR
+from config import (
+    PHOTOS_DIR,
+    VIDEOS_DIR,
+    BUFFER_SIZE
+)
 
 
 class Recorder:
@@ -12,9 +16,20 @@ class Recorder:
 
         self.video_path = None
 
-    # ======================================
+        # Buffer circular
+        self.buffer = deque(maxlen=BUFFER_SIZE)
+
+    # =====================================
+    # AGREGAR FRAME AL BUFFER
+    # =====================================
+
+    def update_buffer(self, frame):
+
+        self.buffer.append(frame.copy())
+
+    # =====================================
     # FOTO
-    # ======================================
+    # =====================================
 
     def save_photo(self, frame, filename):
 
@@ -24,9 +39,9 @@ class Recorder:
 
         return path
 
-    # ======================================
+    # =====================================
     # INICIAR VIDEO
-    # ======================================
+    # =====================================
 
     def start_video(self, filename, frame, fps):
 
@@ -46,23 +61,31 @@ class Recorder:
 
         )
 
-    # ======================================
-    # AGREGAR FRAME
-    # ======================================
+        # ==========================
+        # ESCRIBIR BUFFER
+        # ==========================
+
+        for img in self.buffer:
+
+            self.writer.write(img)
+
+    # =====================================
+    # ESCRIBIR FRAME
+    # =====================================
 
     def write(self, frame):
 
-        if self.writer is not None:
+        if self.writer:
 
             self.writer.write(frame)
 
-    # ======================================
+    # =====================================
     # FINALIZAR
-    # ======================================
+    # =====================================
 
     def stop(self):
 
-        if self.writer is not None:
+        if self.writer:
 
             self.writer.release()
 

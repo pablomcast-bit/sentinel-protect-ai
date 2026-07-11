@@ -40,7 +40,9 @@ class DisplayManager:
 
         x1, y1, x2, y2 = detection["bbox"]
 
-        label = detection["class"]
+        person_id = detection.get("id", "?")
+
+        label = f"ID {person_id}"
 
         if zone:
             label += f" | {zone}"
@@ -58,7 +60,7 @@ class DisplayManager:
             label,
             (x1, y1 - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
+            0.7,
             (0, 255, 0),
             2
         )

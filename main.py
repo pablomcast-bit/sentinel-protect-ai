@@ -5,6 +5,9 @@ from modules.detector import Detector
 from modules.zone_manager import ZoneManager
 from modules.display_manager import DisplayManager
 from modules.event_engine import EventEngine
+from modules.behavior_engine import BehaviorEngine
+from modules.risk_engine import RiskEngine
+from modules.tracker import Tracker
 
 
 def main():
@@ -18,6 +21,9 @@ def main():
     display = DisplayManager()
     zones = ZoneManager()
     events = EventEngine()
+    behavior = BehaviorEngine()
+    risk = RiskEngine()
+    tracker = Tracker()
 
     # ===========================
     # ZONAS
@@ -27,8 +33,6 @@ def main():
     zones.add_zone("INTERIOR", 220, 100, 420, 400)
     zones.add_zone("VENTANA", 440, 0, 640, 480)
 
-    person_detected = False
-
     while True:
 
         frame = camera.read()
@@ -36,7 +40,22 @@ def main():
         if frame is None:
             break
 
+        # Actualizar buffer de video
+        events.update_buffer(frame)
+
+        # Detectar personas
         detections = detector.detect(frame)
+
+        detections = [
+
+            d for d in detections
+
+            if d["class"] == "person"
+
+        ]
+
+        # Asignar IDs
+        detections = tracker.update(detections)
 
         display.draw_zones(frame, zones)
 
@@ -44,10 +63,9 @@ def main():
 
         for detection in detections:
 
-            if detection["class"] != "person":
-                continue
-
             zone = zones.get_zone(detection["bbox"])
+
+            person_detected = True
 
             display.draw_detection(
                 frame,
@@ -55,16 +73,95 @@ def main():
                 zone
             )
 
-            if zone is not None:
+            x1, y1, x2, y2 = detection["bbox"]
 
-                person_detected = True
+            # ===========================
+            # INFORMACIÓN DEL TRACKER
+            # ===========================
 
-                if not events.recording:
+            cv2.putText(
 
-                    events.start(
-                        frame,
-                        zone
-                    )
+                frame,
+
+                f"{detection['time']:.1f}s",
+
+                (x1, y2 + 20),
+
+                cv2.FONT_HERSHEY_SIMPLEX,
+
+                0.6,
+
+                (255, 255, 0),
+
+                2
+
+            )
+
+            cv2.putText(
+
+                frame,
+
+                f"{detection['speed']:.0f}px/s",
+
+                (x1, y2 + 40),
+
+                cv2.FONT_HERSHEY_SIMPLEX,
+
+                0.6,
+
+                (0, 255, 255),
+
+                2
+
+            )
+
+            cv2.putText(
+
+                frame,
+
+                f"R:{tracker.get_risk(detection['id'])}",
+
+                (x1, y2 + 60),
+
+                cv2.FONT_HERSHEY_SIMPLEX,
+
+                0.6,
+
+                (0, 0, 255),
+
+                2
+
+            )
+
+            if zone is None:
+                continue
+
+            tracker.update_zone(
+                detection["id"],
+                zone
+            )
+
+            points = behavior.analyze(zone)
+
+            if points > 0:
+
+                tracker.add_risk(
+                    detection["id"],
+                    points
+                )
+
+                risk.add(points)
+
+            if risk.alert() and not events.recording:
+
+                events.start(
+                    frame,
+                    zone
+                )
+
+        # ===========================
+        # VIDEO
+        # ===========================
 
         if events.recording:
 
@@ -73,6 +170,40 @@ def main():
         if events.recording and not person_detected:
 
             events.stop()
+
+        # ===========================
+        # RESET
+        # ===========================
+
+        if not person_detected:
+
+            behavior.reset("PUERTA")
+            behavior.reset("INTERIOR")
+            behavior.reset("VENTANA")
+
+            risk.reset()
+
+        # ===========================
+        # RIESGO GLOBAL
+        # ===========================
+
+        cv2.putText(
+
+            frame,
+
+            f"RIESGO GLOBAL: {risk.get_score()}",
+
+            (15, 30),
+
+            cv2.FONT_HERSHEY_SIMPLEX,
+
+            0.8,
+
+            (0, 0, 255),
+
+            2
+
+        )
 
         display.show(frame)
 
